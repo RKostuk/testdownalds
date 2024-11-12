@@ -1,0 +1,80 @@
+version: "3.3"
+
+services:
+  web:
+    build: .
+    image: testdownalds
+    container_name: testdownalds_djangocontainer
+    command: bash -c "(
+      cd /app && \
+      yes yes | python manage.py makemigrations users && \
+      yes yes | python manage.py makemigrations service && \
+      python manage.py collectstatic --no-input && \
+      python manage.py migrate && \
+      hupper -m manage runserver 0.0.0.0:8000
+      )"
+    #    environment:
+    #      - DJANGO_SETTINGS_MODULE=crypto_tap.setting.development
+    volumes:
+      - .:/app
+      - ./static:/app/static
+      - ./media:/app/media
+      - ./frontend_build:/app/frontend/build
+    depends_on:
+      - db
+      - redis
+    networks:
+      - backend
+    ports:
+      - "8000:8000"
+
+  nginx:
+    image: nginx:latest
+    container_name: testdownalds_nginx_container
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/app
+      - ./static:/app/static
+      - ./media:/app/media
+      - ./configs/testdownalds.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend_build:/app/frontend/build
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/conf.d/default.conf
+    depends_on:
+      - web
+    networks:
+      - backend
+
+  redis:
+    image: redis:latest
+    container_name: testdownalds_rediscontainer
+    networks:
+      - backend
+    ports:
+      - "6379:6379"
+
+  db:
+    platform: linux/amd64
+    image: postgres:15-alpine
+    container_name: testdownalds_dbcontainer
+    environment:
+      POSTGRES_DB: AutoFarm_dev
+      POSTGRES_USER: AutoFarm_dev
+      POSTGRES_PASSWORD: AutoFarm_dev
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+    networks:
+      - backend
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./custom_scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db_data:/var/lib/postgresql/data
+
+
+networks:
+  backend:
+configs:
+  nginx_conf:
+    file: ./configs/testdownalds.conf
